@@ -1,865 +1,430 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OneStop Bets – Full Preview (React + Tailwind)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OneStop Bets – Full Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-gray-100">
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useMemo } = React;
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo} = React;
 
-    // ---- Helpers
-    const americanToDecimal = (a) => (a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a));
-    const decimalToAmerican = (d) => (d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1)));
+// ------- Helpers
+const americanToDecimal = (a)=> (a>0? 1+a/100 : 1+100/Math.abs(a));
+const decimalToAmerican = (d)=> (d>=2? Math.round((d-1)*100) : Math.round(-100/(d-1)));
 
-    const BOOKS = [
-      { id:'fd', name:'FanDuel' },
-      { id:'dk', name:'DraftKings' },
-      { id:'mgm', name:'BetMGM' },
-      { id:'czr', name:'Caesars' },
-      { id:'pb', name:'PointsBet' },
-      { id:'bm', name:'Bet365' },
-    ];
+// ------- Mock data
+const BOOKS=[
+  {id:'fd',name:'FanDuel'},{id:'dk',name:'DraftKings'},{id:'mgm',name:'BetMGM'},{id:'czr',name:'Caesars'},{id:'b365',name:'Bet365'}
+];
+const SPORTS=['NFL','NBA','MLB'];
+const today=new Date(); const addH=(h)=> new Date(today.getTime()+h*3600000).toISOString();
+const mockEvents=[
+  {id:'ev1',sport:'NFL',league:'NFL',home:'49ers',away:'Rams',starts_at:addH(2),result:{status:'final',homeScore:24,awayScore:20},model:{homeWin:.64},
+   markets:[{key:'ml',label:'Moneyline',options:[
+     {id:'ev1-ml-home',side:'home',label:'49ers',prices:{fd:-150,dk:-155,mgm:-148,czr:-152}},
+     {id:'ev1-ml-away',side:'away',label:'Rams',prices:{fd:130,dk:135,mgm:128,czr:132}}]},
+     {key:'spread',label:'Spread',options:[
+     {id:'ev1-sp-home',side:'home',label:'49ers -3.5',prices:{fd:-110,dk:-108,mgm:-112,czr:-110}},
+     {id:'ev1-sp-away',side:'away',label:'Rams +3.5',prices:{fd:-110,dk:-112,mgm:-108,czr:-110}}]}
+   ]},
+  {id:'ev2',sport:'NBA',league:'NBA',home:'Kings',away:'Lakers',starts_at:addH(-1),result:{status:'final',homeScore:101,awayScore:108},model:{homeWin:.57},
+   markets:[{key:'ml',label:'Moneyline',options:[
+     {id:'ev2-ml-home',side:'home',label:'Kings',prices:{fd:-120,dk:-118,mgm:-122,czr:-121}},
+     {id:'ev2-ml-away',side:'away',label:'Lakers',prices:{fd:105,dk:102,mgm:104,czr:103}}]},
+     {key:'spread',label:'Spread',options:[
+     {id:'ev2-sp-home',side:'home',label:'Kings -2.5',prices:{fd:-110,dk:-112,mgm:-110,czr:-108}},
+     {id:'ev2-sp-away',side:'away',label:'Lakers +2.5',prices:{fd:-110,dk:-108,mgm:-110,czr:-112}}]}
+   ]},
+  {id:'ev3',sport:'MLB',league:'MLB',home:'Giants',away:'Dodgers',starts_at:addH(6),result:{status:'scheduled'},model:{homeWin:.46},
+   markets:[{key:'ml',label:'Moneyline',options:[
+     {id:'ev3-ml-home',side:'home',label:'Giants',prices:{fd:110,dk:112,mgm:108,czr:109}},
+     {id:'ev3-ml-away',side:'away',label:'Dodgers',prices:{fd:-125,dk:-130,mgm:-126,czr:-128}}]},
+     {key:'total',label:'Total',options:[
+     {id:'ev3-t-over',side:'over',label:'Over 8.5',prices:{fd:-105,dk:-110,mgm:-108,czr:-110}},
+     {id:'ev3-t-under',side:'under',label:'Under 8.5',prices:{fd:-115,dk:-110,mgm:-112,czr:-110}}]}
+   ]},
+];
+function bestPrice(opt){
+  const entries=Object.entries(opt.prices||{}); let best=null;
+  for(const [bookId,price] of entries){ if(price==null||!isFinite(price)) continue; const score=americanToDecimal(price); if(!best||score>best.score) best={score,book:bookId,price}; }
+  const book=BOOKS.find(b=>b.id===best?.book)||BOOKS[0];
+  return {price:best?.price??-110,book};
+}
 
-    const SPORTS = ['NFL','NBA','MLB'];
+// ------- UI primitives
+const Card=({children,onClick,className=''})=>(
+  <div onClick={onClick} className={`rounded-2xl shadow p-4 bg-white hover:shadow-md transition ${onClick?'cursor-pointer':''} ${className}`}>{children}</div>
+);
+const Chip=({children,active,onClick})=>(
+  <button onClick={onClick} className={`px-3 py-1 rounded-full border text-sm mr-2 mb-2 ${active?'bg-black text-white':'bg-white'}`}>{children}</button>
+);
+const SectionTitle=({children})=>(<div className="text-xs uppercase tracking-wider text-gray-500 mt-6 mb-2">{children}</div>);
+function BottomNav({current,onNav}){
+  const items=[
+    {key:'home',label:'Home'},{key:'builder',label:'Bet Builder'},{key:'activity',label:'Activity'},{key:'experts',label:'Experts'},
+    {key:'news',label:'News'},{key:'stats',label:'Stats'},{key:'promo',label:'Promo'},{key:'account',label:'Account'}
+  ];
+  return (
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t">
+      <div className="max-w-5xl mx-auto px-2 py-2 grid grid-cols-4 sm:grid-cols-8 gap-1 text-sm">
+        {items.map(it=>(<button key={it.key} onClick={()=>onNav(it.key)} className={`px-2 py-2 rounded ${current===it.key?'bg-gray-900 text-white':'hover:bg-gray-100'}`}>{it.label}</button>))}
+      </div>
+    </div>
+  );
+}
+function ModelBadge({homeWin}){
+  const fair=decimalToAmerican(1/homeWin);
+  return (<div className="border rounded-xl p-3 bg-gray-50">
+    <div className="text-xs text-gray-600">Model</div>
+    <div className="font-semibold">Home win: {(homeWin*100).toFixed(1)}%</div>
+    <div className="text-xs text-gray-600">Fair ML (home): {fair>0?`+${fair}`:fair}</div>
+  </div>);
+}
 
-    const today = new Date();
-    const addH = (h) => new Date(today.getTime() + h*3600000).toISOString();
+// ------- Bet Builder page & overlay
+function BetBuilderPage({parlay,setParlay,singles,setSingles,onPlaceParlay,onPlaceSingles}){
+  const [mode,setMode]=useState('parlay'); const [stake,setStake]=useState(25);
+  const decTotal=parlay.reduce((a,l)=>a*americanToDecimal(l.american),1);
+  const americanTotal=parlay.length? decimalToAmerican(decTotal):0; const implied=parlay.length? 1/decTotal:0;
+  const [sport,setSport]=useState('ALL'); const [team,setTeam]=useState('ALL');
+  const teams=useMemo(()=>[...new Set(mockEvents.filter(ev=>sport==='ALL'||ev.sport===sport).flatMap(ev=>[ev.home,ev.away]))],[sport]);
+  const filteredBets=mockEvents
+    .filter(ev=>sport==='ALL'||ev.sport===sport)
+    .filter(ev=>team==='ALL'||[ev.home,ev.away].includes(team))
+    .flatMap(ev=>ev.markets.flatMap(m=>m.options.map(opt=>({ev,opt,m}))));
 
-    // Mock events (with outcomes for Activity auto-update demo)
-    const mockEvents = [
-      { id:'ev1', sport:'NFL', league:'NFL', home:'49ers', away:'Rams', starts_at:addH(2),
-        result: { status:'final', homeScore:24, awayScore:20 }, // home win
-        markets:[{ key:'ml', label:'Moneyline', options:[
-          { id:'ev1-ml-home', side:'home', label:'49ers', prices:{ fd:-150, dk:-155, mgm:-148, czr:-152 } },
-          { id:'ev1-ml-away', side:'away', label:'Rams',   prices:{ fd:130, dk:135, mgm:128, czr:132 } },
-        ]}],
-        model: { homeWin:0.64 }
-      },
-      { id:'ev2', sport:'NBA', league:'NBA', home:'Kings', away:'Lakers', starts_at:addH(-1),
-        result: { status:'final', homeScore:101, awayScore:108 }, // away win
-        markets:[{ key:'ml', label:'Moneyline', options:[
-          { id:'ev2-ml-home', side:'home', label:'Kings',  prices:{ fd:-120, dk:-118, mgm:-122, czr:-121 } },
-          { id:'ev2-ml-away', side:'away', label:'Lakers', prices:{ fd:105, dk:102, mgm:104, czr:103 } },
-        ]}],
-        model: { homeWin:0.57 }
-      },
-      { id:'ev3', sport:'MLB', league:'MLB', home:'Giants', away:'Dodgers', starts_at:addH(6),
-        result: { status:'scheduled' },
-        markets:[{ key:'ml', label:'Moneyline', options:[
-          { id:'ev3-ml-home', side:'home', label:'Giants', prices:{ fd:110, dk:112, mgm:108, czr:109 } },
-          { id:'ev3-ml-away', side:'away', label:'Dodgers', prices:{ fd:-125, dk:-130, mgm:-126, czr:-128 } },
-        ]}],
-        model: { homeWin:0.46 }
-      },
-    ];
-
-    function resolveBest(option){
-      const entries = Object.entries(option.prices || {});
-      let best = null;
-      for(const [bookId, price] of entries){
-        if(price == null || !isFinite(price)) continue;
-        const score = americanToDecimal(price);
-        if(!best || score > best.score) best = {score, book:bookId, price};
-      }
-      const book = BOOKS.find(b=>b.id===best?.book) || BOOKS[0];
-      return { price: best?.price ?? -110, book };
-    }
-
-    // ---- UI primitives
-    const Card = ({children, onClick, className=''}) => (
-      <div onClick={onClick} className={"rounded-2xl shadow p-4 bg-white hover:shadow-md transition " + (onClick?'cursor-pointer ':'') + className}>{children}</div>
-    );
-    const Chip = ({ children, active, onClick }) => (
-      <button onClick={onClick} className={"px-3 py-1 rounded-full border text-sm mr-2 mb-2 " + (active ? "bg-black text-white":"bg-white")}>
-        {children}
-      </button>
-    );
-    function SectionTitle({children}){
-      return <div className="text-xs uppercase tracking-wider text-gray-500 mt-6 mb-2">{children}</div>;
-    }
-
-    function BottomNav({current, onNav}){
-      const items = [
-        {key:'home', label:'Home'},
-        {key:'builder', label:'Bet Builder'},
-        {key:'activity', label:'Activity'},
-        {key:'experts', label:'Experts'},
-        {key:'news', label:'News'},
-        {key:'stats', label:'Stats'},
-        {key:'promo', label:'Promo'},
-        {key:'account', label:'Account'},
-      ];
-      return (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t">
-          <div className="max-w-5xl mx-auto px-2 py-2 grid grid-cols-4 sm:grid-cols-8 gap-1 text-sm">
-            {items.map(it => (
-              <button key={it.key} onClick={()=>onNav(it.key)} className={"px-2 py-2 rounded " + (current===it.key?'bg-gray-900 text-white':'hover:bg-gray-100')}>{it.label}</button>
-            ))}
-          </div>
+  return (
+    <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-sm">Mode:</span>
+        <select value={mode} onChange={(e)=>setMode(e.target.value)} className="border rounded px-2 py-1 text-sm">
+          <option value="parlay">Parlay</option><option value="singles">Singles</option>
+        </select>
+        <div className="ml-auto flex items-center gap-2 text-sm">
+          <span className="text-gray-500">{parlay.length} parlay leg(s) · {singles.length} single(s)</span>
+          <button className="px-2 py-1 rounded border" onClick={()=>{setParlay([]);setSingles([]);}}>Clear All</button>
         </div>
-      );
-    }
+      </div>
 
-    function ModelBadge({ homeWin }){
-      const fairAmericanHome = decimalToAmerican(1 / homeWin);
-      return (
-        <div className="border rounded-xl p-3 bg-gray-50">
-          <div className="text-xs text-gray-600">Model</div>
-          <div className="font-semibold">Home win: {(homeWin*100).toFixed(1)}%</div>
-          <div className="text-xs text-gray-600">Fair ML (home): {fairAmericanHome>0?`+${fairAmericanHome}`:fairAmericanHome}</div>
-        </div>
-      );
-    }
-
-    // ---- Home
-    function Home({onAddLeg, onOpenGame}){
-      const [sport, setSport] = useState('ALL');
-      const filtered = mockEvents.filter(ev => sport==='ALL' || ev.sport===sport);
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-sm">Sport:</span>
-            <select value={sport} onChange={(e)=>setSport(e.target.value)} className="border rounded px-2 py-1 text-sm">
-              <option value="ALL">ALL</option>
-              {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button className="ml-auto px-3 py-1 rounded border" onClick={()=> window.alert('Login overlay shows on first open (demo)')}>Login</button>
-          </div>
-          <SectionTitle>Today’s Edges</SectionTitle>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {filtered.map(ev => (
-              <Card key={ev.id}>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs font-semibold px-2 py-1 rounded bg-gray-900 text-white">{ev.league}</div>
-                  <button className="font-semibold underline" onClick={()=>onOpenGame(ev)}> {ev.away} @ {ev.home}</button>
-                  <div className="ml-auto text-sm text-gray-500">{new Date(ev.starts_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <ModelBadge homeWin={ev.model.homeWin} />
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {ev.markets[0].options.map(opt => {
-                    const best = resolveBest(opt);
-                    return (
-                      <button key={opt.id} onClick={()=> onAddLeg({ eventId:ev.id, label:`${ev.away} @ ${ev.home} • ${opt.label}`, american: best.price, book: best.book.id })} className="rounded-xl border p-3 text-left hover:shadow">
-                        <div className="text-xs text-gray-500">Best: {best.book.name}</div>
-                        <div className="font-semibold">{opt.label}</div>
-                        <div className="text-sm">{best.price>0?`+${best.price}`:best.price}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    // ---- Game Page
-    function Game({game}){
-      if(!game) return null;
-      const trends = [
-        { id:1, text:`${game.home} are 4-1 in last 5 at home`},
-        { id:2, text:`${game.away} are 5-2 in last 7 overall`},
-      ];
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <h2 className="text-xl font-semibold">{game.away} @ {game.home} <span className="ml-2 text-xs px-2 py-1 rounded bg-gray-200">{game.league}</span></h2>
-          <div className="text-sm text-gray-500">Starts {new Date(game.starts_at).toLocaleString()}</div>
-          <div className="mt-3"><ModelBadge homeWin={game.model.homeWin} /></div>
-          <SectionTitle>Team Trends</SectionTitle>
-          <Card>
-            <ul className="list-disc ml-5 text-sm">
-              {trends.map(t=> <li key={t.id}>{t.text}</li>)}
-            </ul>
-          </Card>
-          <SectionTitle>Player Highlights (stub)</SectionTitle>
-          <Card>
-            <div className="text-sm">Top performers last game, usage rates, recent form…</div>
-          </Card>
-          <SectionTitle>Markets</SectionTitle>
-          <Card>
-            <div className="text-sm">Moneyline / Spreads / Totals with best price picker (stub)</div>
-          </Card>
-        </div>
-      );
-    }
-
-    // ---- Bet Builder Overlay
-    function BetBuilderOverlay({open, onClose, parlay, setParlay, mode, setMode, onSaveParlay, onSaveSingles}){
-      if(!open) return null;
-      const [stake, setStake] = useState(25);
-      const [singles, setSingles] = useState([]);
-
-      const decTotal = parlay.reduce((acc, l)=> acc * americanToDecimal(l.american), 1);
-      const americanTotal = parlay.length ? decimalToAmerican(decTotal) : 0;
-      const implied = parlay.length ? (1/decTotal) : 0;
-      const estReturnIncl = stake * (parlay.length ? decTotal : 0);
-
-      return (
-        <div className="fixed inset-0 z-50 bg-black/40 flex">
-          <div className="ml-auto w-full sm:w-[560px] h-full bg-white shadow-xl flex flex-col">
-            <div className="p-3 border-b flex items-center gap-2">
-              <div className="font-semibold">Bet Builder</div>
-              <div className="ml-auto text-sm">
-                <select className="border rounded px-2 py-1" value={mode} onChange={(e)=>setMode(e.target.value)}>
-                  <option value="parlay">Parlay</option>
-                  <option value="singles">Singles</option>
-                </select>
-              </div>
-              <button className="px-2 py-1 text-sm" onClick={onClose}>Close</button>
-            </div>
-
-            <div className="p-3 overflow-auto flex-1">
-              {mode==='parlay' ? (
-                <>
-                  <div className="grid gap-2">
-                    {parlay.length===0 && <Card>Add legs from Home/Experts.</Card>}
-                    {parlay.map((leg, idx)=> (
-                      <Card key={idx} className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{leg.label}</div>
-                          <div className="text-xs text-gray-500">{(leg.book||'best').toUpperCase?.() || 'BEST'}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-semibold">{leg.american>0?`+${leg.american}`:leg.american}</div>
-                          <button className="text-xs text-red-700" onClick={()=> setParlay(x=> x.filter((_,i)=>i!==idx))}>Remove</button>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-
-                  <Card className="mt-3">
-                    <div className="grid sm:grid-cols-4 gap-3 items-end">
-                      <div>
-                        <div className="text-xs text-gray-500">Combined Odds</div>
-                        <div className="text-lg font-bold">{parlay.length ? (americanTotal>0?`+${americanTotal}`:americanTotal) : '-'}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Implied Probability</div>
-                        <div className="text-lg font-bold">{parlay.length ? (implied*100).toFixed(2) + '%' : '-'}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Stake ($)</div>
-                        <input type="number" value={stake} onChange={(e)=>setStake(parseFloat(e.target.value)||0)} className="border rounded px-2 py-1 w-24" />
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Est. Return (incl. stake)</div>
-                        <div className="text-lg font-bold">{parlay.length ? `$${estReturnIncl.toFixed(2)}` : '-'}</div>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      {[10,25,50,100].map(v=> <button key={v} onClick={()=>setStake(v)} className="px-3 py-2 rounded border">${v}</button>)}
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button className="px-4 py-2 rounded border" onClick={()=> onSaveParlay({ stake, clear:false, auto:true })} disabled={!parlay.length}>Save</button>
-                      <button className="px-4 py-2 rounded border" onClick={()=> setParlay([])} disabled={!parlay.length}>Clear</button>
-                      <button className="px-4 py-2 rounded bg-black text-white" onClick={()=> onSaveParlay({ stake, clear:false, auto:true, place:true })} disabled={!parlay.length}>Place Bet at Sportsbook</button>
-                    </div>
-                  </Card>
-                </>
-              ) : (
-                <SinglesBuilder onSaveSingles={onSaveSingles} />
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    function SinglesBuilder({ onSaveSingles }){
-      const [single, setSingle] = useState({ desc:'', american:-110, stake:25 });
-      const [singles, setSingles] = useState([]);
-      const est = single.desc && single.american && single.stake
-        ? (Number(single.stake)*americanToDecimal(Number(single.american))).toFixed(2) : null;
-      return (
-        <div>
-          <h3 className="text-lg font-semibold mb-2">Single Bet Calculator</h3>
-          <Card>
-            <div className="grid sm:grid-cols-5 gap-3 items-end text-sm">
-              <div className="sm:col-span-2">
-                <div className="text-xs text-gray-500">Description</div>
-                <input placeholder="e.g., Kings -2.5 vs LAL" value={single.desc} onChange={(e)=>setSingle({...single, desc:e.target.value})} className="border rounded px-2 py-1 w-full"/>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">Odds (American)</div>
-                <input type="number" value={single.american} onChange={(e)=>setSingle({...single, american:e.target.value})} className="border rounded px-2 py-1 w-full"/>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">Stake ($)</div>
-                <input type="number" value={single.stake} onChange={(e)=>setSingle({...single, stake:e.target.value})} className="border rounded px-2 py-1 w-full"/>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">Est. Return</div>
-                <div className="text-base font-semibold">{est ? `$${est}` : '—'}</div>
-              </div>
-              <div className="sm:col-span-5 flex gap-2">
-                {[10,25,50,100].map(v=> <button key={v} onClick={()=>setSingle({...single, stake: v})} className="px-3 py-2 rounded border">${v}</button>)}
-                <div className="ml-auto flex gap-2">
-                  <button className="px-3 py-2 rounded border" onClick={()=> setSingles(p=> [...p, {desc:single.desc, american:Number(single.american)||-110, stake:Number(single.stake)||0 }])} disabled={!single.desc}>Add Single</button>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <SectionTitle>Pending Singles</SectionTitle>
-          <Card>
-            {singles.length===0 ? (
-              <div className="text-sm">No singles yet.</div>
-            ) : (
-              <div className="grid gap-2">
-                {singles.map((s, idx)=> (
-                  <div key={idx} className="flex items-center justify-between border rounded-xl p-3">
-                    <div>
-                      <div className="font-medium">{s.desc}</div>
-                      <div className="text-xs text-gray-600">Odds {s.american>0?`+${s.american}`:s.american} · Stake ${Number(s.stake).toFixed(2)}</div>
-                    </div>
-                    <button className="text-xs text-red-700" onClick={()=> setSingles(prev => prev.filter((_,i)=>i!==idx))}>Remove</button>
-                  </div>
-                ))}
-                <div className="flex gap-2 justify-end mt-2">
-                  <button className="px-4 py-2 rounded border" onClick={()=> onSaveSingles({ singles, clear:false })} disabled={!singles.length}>Save</button>
-                  <button className="px-4 py-2 rounded border" onClick={()=> onSaveSingles({ singles, clear:true })} disabled={!singles.length}>Place Bet at Sportsbook</button>
-                </div>
-              </div>
-            )}
-          </Card>
-        </div>
-      );
-    }
-
-    // ---- Activity (auto results; no manual result changing)
-    function Activity({bets, setBets, startingBankroll, setStartingBankroll}){
-      const decFromAmerican = (a)=> (a>0 ? 1 + a/100 : 1 + 100/Math.abs(a));
-      const net = (b)=> {
-        if (b.result==='push' || b.result==='open') return 0;
-        const d = decFromAmerican(b.american);
-        return b.result==='win' ? b.stake*(d-1) : -b.stake;
-      };
-      const totalStaked = bets.reduce((s,b)=> s + (b.result==='push'||b.result==='open'?0:Number(b.stake)), 0);
-      const pnl = bets.reduce((s,b)=> s + net(b), 0);
-      const roi = totalStaked>0 ? (pnl/totalStaked) : 0;
-      const currentBankroll = startingBankroll + pnl;
-
-      const autoResolve = () => {
-        setBets(prev => prev.map(b => {
-          if (b.result !== 'open') return b;
-          const label = (b.desc||'').toLowerCase();
-          const match = mockEvents.find(ev => label.includes(ev.home.toLowerCase()) || label.includes(ev.away.toLowerCase()));
-          if(!match || match.result.status!=='final') return b;
-          const winner = match.result.homeScore > match.result.awayScore ? match.home : match.away;
-          const chosen = label.includes(winner.toLowerCase());
-          return { ...b, result: chosen ? 'win' : 'loss' };
-        }));
-        alert('Results refreshed from mock scores.');
-      };
-
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <SectionTitle>Bankroll</SectionTitle>
-          <Card>
-            <div className="grid sm:grid-cols-4 gap-3 items-end">
-              <div>
-                <div className="text-xs text-gray-500">Starting Bankroll ($)</div>
-                <input type="number" value={startingBankroll} onChange={(e)=>setStartingBankroll(parseFloat(e.target.value)||0)} className="border rounded px-2 py-1 w-full"/>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">Current Bankroll</div>
-                <div className="text-xl font-bold">${currentBankroll.toFixed(2)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">Profit / Loss</div>
-                <div className={"text-xl font-bold " + (pnl>=0?'text-green-700':'text-red-700')}>{pnl>=0?'+':''}${pnl.toFixed(2)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">ROI</div>
-                <div className={"text-xl font-bold " + (roi>=0?'text-green-700':'text-red-700')}>{(roi*100).toFixed(2)}%</div>
-              </div>
-            </div>
-          </Card>
-
-          <SectionTitle>My Logged Bets</SectionTitle>
-          <Card>
-            {bets.length===0 ? (
-              <div className="text-sm">No bets logged yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-gray-500">
-                      <th className="py-1">Date</th>
-                      <th>Bet</th>
-                      <th className="text-right">Stake</th>
-                      <th className="text-right">Odds</th>
-                      <th className="text-right">Result</th>
-                      <th className="text-right">Net</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bets.map(b=>{
-                      const n = net(b);
-                      return (
-                        <tr key={b.id} className="border-t">
-                          <td className="py-2">{b.date}</td>
-                          <td>{b.desc || '—'}</td>
-                          <td className="text-right">${Number(b.stake).toFixed(2)}</td>
-                          <td className="text-right">{b.american>0?`+${b.american}`:b.american}</td>
-                          <td className="text-right">{b.result}</td>
-                          <td className={"text-right " + (n>=0?'text-green-700':'text-red-700')}>{n>=0?'+':''}${n.toFixed(2)}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="border-t font-semibold">
-                      <td colSpan={2}>Totals</td>
-                      <td className="text-right">${bets.reduce((s,b)=> s + (b.result==='push'||b.result==='open'?0:Number(b.stake)), 0).toFixed(2)}</td>
-                      <td></td>
-                      <td></td>
-                      <td className={"text-right " + ((pnl)>=0?'text-green-700':'text-red-700')}>{(pnl)>=0?'+':''}${(pnl).toFixed(2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="mt-3 flex justify-end">
-              <button className="px-3 py-2 rounded border" onClick={autoResolve}>Refresh Results (demo)</button>
-            </div>
-          </Card>
-        </div>
-      );
-    }
-
-    // ---- Experts (publish -> feed; expert profile)
-    function ExpertProfile({expert, onBack}){
-      if(!expert) return null;
-      const [range, setRange] = useState('All Time');
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <button className="text-sm text-blue-700" onClick={onBack}>← Back</button>
-          <div className="flex items-center gap-3 mt-2">
-            <div className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center">{expert.initials}</div>
-            <div>
-              <div className="font-semibold">{expert.name}</div>
-              <div className="text-xs text-gray-500">{expert.bio}</div>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm">Show:</span>
-            {['Yesterday','Today','Last Week','Month','All Time'].map(r => (
-              <Chip key={r} active={range===r} onClick={()=>setRange(r)}>{r}</Chip>
-            ))}
-          </div>
-          <SectionTitle>Picks</SectionTitle>
-          <div className="grid gap-2">
-            {expert.picks.map((p,i)=> (
-              <Card key={i}><div className="font-medium">{p.title}</div><div className="text-sm text-gray-600">{p.snip}</div></Card>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    function Experts({role, setRole}){
-      const [tab, setTab] = useState('feed');
-      const [feed, setFeed] = useState([
-        { id:1, author:'Sharp Mike', initials:'SM', title:'Kings -2.5 (-110)', snip:'Pace up spot; bench edge.' },
-      ]);
-      const [openProfile, setOpenProfile] = useState(null);
-
-      const goProfile = (name, initials) => {
-        setOpenProfile({ name, initials, bio:'Short bio placeholder', picks:[...feed.map(f=> ({title:f.title, snip:f.snip}))]});
-      };
-
-      if(openProfile){
-        return <ExpertProfile expert={openProfile} onBack={()=>setOpenProfile(null)} />;
-      }
-
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Chip active={tab==='feed'} onClick={()=>setTab('feed')}>Expert Feed</Chip>
-            <Chip active={tab==='leaderboard'} onClick={()=>setTab('leaderboard')}>Leaderboard</Chip>
-            {(role==='writer'||role==='admin') && <Chip active={tab==='writer'} onClick={()=>setTab('writer')}>Writer Console</Chip>}
-            <div className="ml-auto text-sm">
-              Role:&nbsp;
-              <select className="border rounded px-2 py-1" value={role} onChange={(e)=>setRole(e.target.value)}>
-                <option value="user">User</option>
-                <option value="writer">Writer</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-          </div>
-
-          {tab==='feed' && (
-            <div className="grid sm:grid-cols-2 gap-3">
-              {feed.map(item => (
-                <Card key={item.id}>
-                  <div className="flex items-center gap-3">
-                    <button className="w-8 h-8 rounded-full bg-gray-900 text-white flex items-center justify-center" onClick={()=>goProfile(item.author, item.initials)}>{item.initials}</button>
-                    <button className="font-semibold underline" onClick={()=>goProfile(item.author, item.initials)}>{item.author}</button>
-                  </div>
-                  <div className="mt-3"><span className="font-medium">{item.title}</span></div>
-                  <div className="text-sm text-gray-600 mt-1">{item.snip}</div>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {tab==='leaderboard' && (
-            <Card>
-              <div className="font-semibold mb-2">Top Experts (YTD)</div>
-              <table className="w-full text-sm">
-                <thead><tr className="text-left text-gray-500"><th>Name</th><th>W-L</th><th>ROI</th></tr></thead>
-                <tbody>
-                  <tr><td>Sharp Mike</td><td>187-154</td><td className="text-green-700">+6.3%</td></tr>
-                  <tr><td>Data Diva</td><td>162-130</td><td className="text-green-700">+4.8%</td></tr>
-                </tbody>
-              </table>
-            </Card>
-          )}
-
-          {tab==='writer' && (
-            <WriterConsole onPublish={(post)=> { setFeed(f=> [{ id: Date.now(), author:'You', initials:'YW', title:post.title, snip:post.snip }, ...f]); setTab('feed'); }} />
-          )}
-        </div>
-      );
-    }
-
-    function WriterConsole({onPublish}){
-      const [status, setStatus] = useState('draft');
-      const [pick, setPick] = useState({ league: 'NBA', event: 'LAL @ SAC', market: 'Spread', line: '-2.5', odds: -110, body: '' });
-      const preview = () => alert('Preview (stub).');
-      const publish = () => {
-        onPublish?.({ title: `${pick.event} • ${pick.market} ${pick.line} (${pick.odds})`, snip: pick.body || 'Quick hit.' });
-      };
-      return (
-        <div className="grid gap-3">
-          <Card>
-            <div className="font-semibold mb-2">Compose Pick</div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-600">League</label>
-                <select className="border rounded px-2 py-1 w-full" value={pick.league} onChange={(e)=>setPick({...pick, league:e.target.value})}>
-                  <option>NFL</option>
-                  <option>NBA</option>
-                  <option>MLB</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">Event</label>
-                <input className="border rounded px-2 py-1 w-full" value={pick.event} onChange={(e)=>setPick({...pick, event:e.target.value})} />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">Market</label>
-                <select className="border rounded px-2 py-1 w-full" value={pick.market} onChange={(e)=>setPick({...pick, market:e.target.value})}>
-                  <option>Moneyline</option>
-                  <option>Spread</option>
-                  <option>Total</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">Line / Odds</label>
-                <div className="flex gap-2">
-                  <input className="border rounded px-2 py-1 w-full" placeholder="-2.5" value={pick.line} onChange={(e)=>setPick({...pick, line:e.target.value})} />
-                  <input type="number" className="border rounded px-2 py-1 w-28" placeholder="-110" value={pick.odds} onChange={(e)=>setPick({...pick, odds: parseInt(e.target.value)||-110})} />
-                </div>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="text-xs text-gray-600">Writeup</label>
-                <textarea className="border rounded px-2 py-1 w-full" rows={4} value={pick.body} onChange={(e)=>setPick({...pick, body:e.target.value})} />
-              </div>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <button className="px-3 py-2 rounded border" onClick={()=>setStatus('draft')}>Save Draft</button>
-              <button className="px-3 py-2 rounded border" onClick={preview}>Preview</button>
-              <button className="px-3 py-2 rounded bg-black text-white" onClick={()=>{ setStatus('published'); publish(); }}>Publish</button>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">Status: {status}</div>
-          </Card>
-        </div>
-      );
-    }
-
-    // ---- News
-    function News(){
-      const items = [
-        { id: 1, sport:'NFL', league: 'NFL', team: '49ers', title: 'Injury Update: star questionable', source: 'Athletic', minutes: 12 },
-        { id: 2, sport:'NBA', league: 'NBA', team: 'Lakers', title: 'Trade rumor heats up', source: 'ESPN', minutes: 18 },
-        { id: 3, sport:'MLB', league: 'MLB', team: 'Dodgers', title: 'Pitching change for tonight', source: 'MLB.com', minutes: 6 },
-      ];
-      const [sport, setSport] = useState('ALL');
-      const teams = useMemo(()=> [...new Set(items.filter(x=> sport==='ALL' || x.sport===sport).map(i=>i.team))], [sport]);
-      const [team, setTeam] = useState('ALL');
-
-      const filtered = items
-        .filter(x=> sport==='ALL' || x.sport===sport)
-        .filter(x=> team==='ALL' || x.team===team)
-        .sort((a,b)=> a.minutes - b.minutes); // recent first
-
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <div className="flex gap-2 mb-3 items-center">
-            <span className="text-sm">Sport:</span>
-            <select value={sport} onChange={(e)=>{ setSport(e.target.value); setTeam('ALL'); }} className="border rounded px-2 py-1 text-sm">
-              <option value="ALL">ALL</option>
-              {SPORTS.map(s => <option key={s}>{s}</option>)}
-            </select>
-            <span className="text-sm">Team:</span>
-            <select value={team} onChange={(e)=>setTeam(e.target.value)} className="border rounded px-2 py-1 text-sm">
-              <option value="ALL">ALL</option>
-              {teams.map(t => <option key={t}>{t}</option>)}
+      <SectionTitle>Find Bets</SectionTitle>
+      <Card>
+        <div className="grid sm:grid-cols-3 gap-3 items-end">
+          <div><div className="text-xs text-gray-500">Sport</div>
+            <select className="border rounded px-2 py-1 w-full" value={sport} onChange={(e)=>{setSport(e.target.value);setTeam('ALL');}}>
+              <option value="ALL">ALL</option>{SPORTS.map(s=><option key={s}>{s}</option>)}
             </select>
           </div>
-          <div className="grid gap-3">
-            {filtered.map(n=> (
-              <Card key={n.id}>
-                <div className="text-sm text-gray-500">{n.league} · {n.team} · {n.source} · {n.minutes}m ago</div>
-                <div className="font-semibold mt-1">{n.title}</div>
-              </Card>
-            ))}
+          <div><div className="text-xs text-gray-500">Team</div>
+            <select className="border rounded px-2 py-1 w-full" value={team} onChange={(e)=>setTeam(e.target.value)}>
+              <option value="ALL">ALL</option>{teams.map(t=><option key={t}>{t}</option>)}
+            </select>
           </div>
+          <div className="text-sm text-gray-600">Showing {filteredBets.length} options</div>
         </div>
-      );
-    }
+      </Card>
 
-    // ---- Stats
-    function Stats(){
-      const [tab, setTab] = useState('team'); // team | player
-      const [range, setRange] = useState('season'); // season | month | week | last_game
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <div className="flex gap-2 mb-3">
-            <Chip active={tab==='team'} onClick={()=>setTab('team')}>Team</Chip>
-            <Chip active={tab==='player'} onClick={()=>setTab('player')}>Individual</Chip>
-            <div className="ml-auto">
-              <select className="border rounded px-2 py-1 text-sm" value={range} onChange={(e)=>setRange(e.target.value)}>
-                <option value="season">Season</option>
-                <option value="month">Last 30 days</option>
-                <option value="week">Last 7 days</option>
-                <option value="last_game">Last game</option>
-              </select>
+      <div className="grid sm:grid-cols-2 gap-3 mt-3">
+        {filteredBets.map(({ev,opt,m})=>{const {price,book}=bestPrice(opt);
+          return (<Card key={opt.id}>
+            <div className="text-sm text-gray-500">{ev.sport} · {ev.away} @ {ev.home} · {m.label}</div>
+            <div className="font-semibold">{opt.label}</div>
+            <div className="text-xs text-gray-500">Best: {book.name}</div>
+            <div className="mt-2 flex gap-2">
+              <button className="px-3 py-1 rounded border" onClick={()=>setParlay(p=>[...p,{eventId:ev.id,label:`${ev.away} @ ${ev.home} • ${opt.label}`,american:price,book:book.id}])}>Add to Parlay</button>
+              <button className="px-3 py-1 rounded border" onClick={()=>setSingles(s=>[...s,{desc:`${ev.away} @ ${ev.home} • ${opt.label}`,american:price,stake:25}])}>Add Single</button>
             </div>
+          </Card>);
+        })}
+      </div>
+
+      {mode==='parlay'? (<>
+        <SectionTitle>Parlay</SectionTitle>
+        <div className="grid gap-2">
+          {parlay.length===0 && <Card>No legs yet.</Card>}
+          {parlay.map((leg,idx)=>(<Card key={idx} className="flex items-center justify-between">
+            <div><div className="font-medium">{leg.label}</div><div className="text-xs text-gray-500">{(BOOKS.find(b=>b.id===leg.book)?.name)||'Best'}</div></div>
+            <div className="text-right"><div className="font-semibold">{leg.american>0?`+${leg.american}`:leg.american}</div>
+              <button className="text-xs text-red-700" onClick={()=>setParlay(x=>x.filter((_,i)=>i!==idx))}>Remove</button></div>
+          </Card>))}
+        </div>
+        <Card className="mt-3">
+          <div className="grid sm:grid-cols-4 gap-3 items-end">
+            <div><div className="text-xs text-gray-500">Combined Odds</div><div className="text-lg font-bold">{parlay.length?(americanTotal>0?`+${americanTotal}`:americanTotal):'-'}</div></div>
+            <div><div className="text-xs text-gray-500">Implied Probability</div><div className="text-lg font-bold">{parlay.length?(implied*100).toFixed(2)+'%':'-'}</div></div>
+            <div><div className="text-xs text-gray-500">Stake ($)</div><input type="number" value={stake} onChange={(e)=>setStake(parseFloat(e.target.value)||0)} className="border rounded px-2 py-1 w-24"/></div>
+            <div><div className="text-xs text-gray-500">Est. Return (incl. stake)</div><div className="text-lg font-bold">{parlay.length? `$${(stake*decTotal).toFixed(2)}`:'-'}</div></div>
           </div>
-          <Card>
-            {tab==='team' ? (
-              <div className="text-sm">
-                <div className="font-semibold mb-1">Trends & “coincidences” (demo)</div>
-                <ul className="list-disc ml-5">
-                  <li>49ers: 7-1 on Sundays (season)</li>
-                  <li>Dodgers: 5 straight unders on the road (last 7 days)</li>
-                </ul>
-              </div>
-            ) : (
-              <div className="text-sm">
-                <div className="font-semibold mb-1">Player Trends (demo)</div>
-                <ul className="list-disc ml-5">
-                  <li>LeBron: 4/5 games over 25.5 points</li>
-                  <li>McCaffrey: TD in 6 straight</li>
-                </ul>
-              </div>
-            )}
-          </Card>
-        </div>
-      );
-    }
-
-    // ---- Promo
-    function Promo(){
-      const promos = [
-        { id:1, book:'FanDuel', offer:'Bet $5, Get $150', code:'JOINFD' },
-        { id:2, book:'DraftKings', offer:'$200 Bonus Bets', code:'JOINDK' },
-        { id:3, book:'BetMGM', offer:'First Bet Insurance $1000', code:'JOINMGM' },
-      ];
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <SectionTitle>Book Offers</SectionTitle>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {promos.map(p => (
-              <Card key={p.id}>
-                <div className="font-semibold">{p.book}</div>
-                <div className="text-sm text-gray-600">{p.offer}</div>
-                <div className="mt-2">
-                  <button className="px-3 py-2 rounded bg-black text-white" onClick={()=> alert('Open affiliate link (stub)')}>Claim Offer</button>
-                </div>
-              </Card>
-            ))}
+          <div className="mt-3 flex gap-2">{[10,25,50,100].map(v=><button key={v} onClick={()=>setStake(v)} className="px-3 py-2 rounded border">${v}</button>)}</div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className="px-4 py-2 rounded border" onClick={()=>onPlaceParlay({stake,place:false})} disabled={!parlay.length}>Save</button>
+            <button className="px-4 py-2 rounded border" onClick={()=>setParlay([])} disabled={!parlay.length}>Clear</button>
+            <button className="px-4 py-2 rounded bg-black text-white" onClick={()=>onPlaceParlay({stake,place:true})} disabled={!parlay.length}>Place Bet at Sportsbook</button>
           </div>
+        </Card>
+      </>):(<>
+        <SectionTitle>Singles</SectionTitle>
+        <div className="grid gap-2">
+          {singles.length===0 && <Card>No singles yet.</Card>}
+          {singles.map((s,idx)=>(<Card key={idx} className="flex items-center justify-between">
+            <div><div className="font-medium">{s.desc}</div><div className="text-xs text-gray-600">Odds {s.american>0?`+${s.american}`:s.american} · Stake ${Number(s.stake).toFixed(2)}</div></div>
+            <div className="flex items-center gap-2"><input type="number" className="border rounded px-2 py-1 w-24 text-sm" value={s.stake} onChange={(e)=>setSingles(prev=>prev.map((x,i)=>i===idx?{...x,stake:Number(e.target.value)||0}:x))}/>
+              <button className="text-xs text-red-700" onClick={()=>setSingles(prev=>prev.filter((_,i)=>i!==idx))}>Remove</button></div>
+          </Card>))}
         </div>
-      );
-    }
-
-    // ---- Account
-    function Account(){
-      const [plan, setPlan] = useState('monthly');
-      const [preferredBook, setPreferredBook] = useState('fd');
-      const [request, setRequest] = useState('');
-
-      return (
-        <div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
-          <SectionTitle>Subscription</SectionTitle>
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-semibold">{plan==='monthly' ? 'Monthly Plan' : 'Annual Plan'}</div>
-                <div className="text-sm text-gray-600">{plan==='monthly' ? 'Renews on Sep 14' : 'Renews next year'}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <select className="border rounded px-2 py-1" value={plan} onChange={(e)=>setPlan(e.target.value)}>
-                  <option value="monthly">Monthly</option>
-                  <option value="annual">Annual</option>
-                </select>
-                <button className="px-3 py-2 rounded border">Manage Billing</button>
-              </div>
-            </div>
-          </Card>
-
-          <SectionTitle>Preferences</SectionTitle>
-          <Card>
-            <div className="grid sm:grid-cols-2 gap-3 text-sm">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">Preferred Sportsbook</div>
-                <select className="border rounded px-2 py-1 w-full" value={preferredBook} onChange={(e)=>setPreferredBook(e.target.value)}>
-                  {BOOKS.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">Request a sportsbook</div>
-                <div className="flex gap-2">
-                  <input className="border rounded px-2 py-1 w-full" placeholder="Not listed? Tell us…" value={request} onChange={(e)=>setRequest(e.target.value)} />
-                  <button className="px-3 py-2 rounded border" onClick={()=> { if(request.trim()) { alert('Request noted: ' + request); setRequest(''); } }}>Send</button>
-                </div>
-              </div>
-            </div>
-          </Card>
+        <div className="mt-3 flex justify-end gap-2">
+          <button className="px-4 py-2 rounded border" onClick={()=>onPlaceSingles({place:false})} disabled={!singles.length}>Save</button>
+          <button className="px-4 py-2 rounded bg-black text-white" onClick={()=>onPlaceSingles({place:true})} disabled={!singles.length}>Place Bet at Sportsbook</button>
         </div>
-      );
-    }
+      </>)}
+    </div>
+  );
+}
+function BetBuilderOverlay({open,onClose,parlay,setParlay,singles,setSingles,onPlaceParlay,onPlaceSingles}){
+  if(!open) return null;
+  return (<div className="fixed inset-0 z-50 bg-black/40 flex" onClick={onClose}>
+    <div className="ml-auto w-full sm:w-[560px] h-full bg-white shadow-xl flex flex-col" onClick={(e)=>e.stopPropagation()}>
+      <div className="p-3 border-b flex items-center gap-2"><div className="font-semibold">Bet Builder</div><button className="ml-auto px-2 py-1 text-sm" onClick={onClose}>Close</button></div>
+      <div className="p-3 overflow-auto flex-1">
+        <BetBuilderPage parlay={parlay} setParlay={setParlay} singles={singles} setSingles={setSingles} onPlaceParlay={onPlaceParlay} onPlaceSingles={onPlaceSingles}/>
+      </div>
+    </div>
+  </div>);
+}
 
-    // ---- Login overlay
-    function LoginOverlay({open, onClose}){
-      const [email, setEmail] = useState('');
-      const [pwd, setPwd] = useState('');
-      if(!open) return null;
-      return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="w-[420px] bg白 rounded-2xl shadow-xl p-5">
-            <div className="text-lg font-semibold mb-3">Sign in</div>
-            <div className="grid gap-3">
-              <input className="border rounded px-3 py-2" placeholder="Email" value={email} onChange={(e)=>setEmail(e.target.value)} />
-              <input className="border rounded px-3 py-2" type="password" placeholder="Password" value={pwd} onChange={(e)=>setPwd(e.target.value)} />
-              <button className="px-3 py-2 rounded bg-black text-white" onClick={onClose}>Continue</button>
-              <button className="px-3 py-2 rounded border" onClick={onClose}>Continue as Guest</button>
-            </div>
-          </div>
+// ------- Other pages
+function Home({onAddParlay,onAddSingle,onOpenGame}){
+  const [sport,setSport]=useState('ALL'); const filtered=mockEvents.filter(ev=>sport==='ALL'||ev.sport===sport);
+  return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <div className="flex items-center gap-2 mb-3"><span className="text-sm">Sport:</span>
+      <select value={sport} onChange={(e)=>setSport(e.target.value)} className="border rounded px-2 py-1 text-sm"><option value="ALL">ALL</option>{SPORTS.map(s=><option key={s} value={s}>{s}</option>)}</select>
+    </div>
+    <SectionTitle>Today’s Edges</SectionTitle>
+    <div className="grid sm:grid-cols-2 gap-4">
+      {filtered.map(ev=>(<Card key={ev.id}>
+        <div className="flex items-center gap-3">
+          <button className="font-bold" onClick={()=>onOpenGame(ev)}>OneStop Bets</button>
+          <div className="text-xs font-semibold px-2 py-1 rounded bg-gray-900 text-white">{ev.league}</div>
+          <button className="font-semibold underline" onClick={()=>onOpenGame(ev)}>{ev.away} @ {ev.home}</button>
+          <div className="ml-auto text-sm text-gray-500">{new Date(ev.starts_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
         </div>
-      );
-    }
-
-    // ---- App
-    function App(){
-      const [route, setRoute] = useState('home');
-      const [parlay, setParlay] = useState([]);
-      const [builderOpen, setBuilderOpen] = useState(false);
-      const [builderMode, setBuilderMode] = useState('parlay'); // parlay | singles
-      const [bets, setBets] = useState([
-        { id:1, date:'2025-08-10', desc:'49ers ML', stake:50, american:-120, result:'win' },
-        { id:2, date:'2025-08-11', desc:'Dodgers @ Giants Over 8.5', stake:30, american:-105, result:'loss' },
-        { id:3, date:'2025-08-12', desc:'Lakers +2.5', stake:25, american:102, result:'open' },
-      ]);
-      const [startingBankroll, setStartingBankroll] = useState(1000);
-      const [role, setRole] = useState('user');
-      const [loginOpen, setLoginOpen] = useState(true);
-      const [gameView, setGameView] = useState(null);
-
-      const onAddLeg = (leg) => { setParlay(x=>[...x, leg]); setBuilderOpen(true); };
-      const openGame = (ev) => { setGameView(ev); setRoute('game'); };
-
-      // Save parlay — auto-save on "place bet"
-      const saveParlayToLog = ({ stake, clear, auto, place }) => {
-        if (!parlay.length) return;
-        const legs = parlay; // only parlay legs used here
-        const date = new Date().toISOString().slice(0,10);
-        const decTotal = legs.reduce((acc, l)=> acc * americanToDecimal(l.american), 1);
-        const americanTotal = legs.length ? decimalToAmerican(decTotal) : 0;
-        const desc = `PARLAY (${legs.length}): ` + legs.map(l=> l.label).join(' • ');
-        const nextId = (bets[bets.length-1]?.id || 0) + 1;
-        setBets(prev => [...prev, { id: nextId, date, desc, stake:Number(stake)||0, american: americanTotal, result:'open' }]);
-        if (place) alert('Opening sportsbook (stub) and auto-saving bet to log.');
-        setBuilderOpen(false);
-      };
-
-      const saveSinglesToLog = ({ singles, clear }) => {
-        if (!singles?.length) return;
-        const date = new Date().toISOString().slice(0,10);
-        let id = (bets[bets.length-1]?.id || 0);
-        const add = singles.map(s => ({ id: ++id, date, desc:s.desc, stake:Number(s.stake)||0, american:Number(s.american)||-110, result:'open' }));
-        setBets(prev => [...prev, ...add]);
-        setBuilderOpen(false);
-      };
-
-      return (
-        <div className="min-h-screen bg-gray-100 text-gray-900">
-          <div className="sticky top-0 z-20 bg-white border-b">
-            <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-              <div className="font-bold">OneStop Bets</div>
-              <div className="ml-auto text-sm text-gray-500 hidden sm:block">{parlay.length} item(s) in builder</div>
-              <button className="ml-2 px-3 py-1 rounded border" onClick={()=> setBuilderOpen(true)}>Open Builder ({parlay.length})</button>
-            </div>
-          </div>
-
-          {route==='home' && <Home onAddLeg={onAddLeg} onOpenGame={openGame} />}
-          {route==='game' && <Game game={gameView} />}
-          {route==='activity' && <Activity bets={bets} setBets={setBets} startingBankroll={startingBankroll} setStartingBankroll={setStartingBankroll} />}
-          {route==='experts' && <Experts role={role} setRole={setRole} />}
-          {route==='news' && <News />}
-          {route==='stats' && <Stats />}
-          {route==='promo' && <Promo />}
-          {route==='account' && <Account />}
-
-          {/* Builder overlay */}
-          <BetBuilderOverlay
-            open={builderOpen}
-            onClose={()=>setBuilderOpen(false)}
-            parlay={parlay}
-            setParlay={setParlay}
-            mode={builderMode}
-            setMode={setBuilderMode}
-            onSaveParlay={saveParlayToLog}
-            onSaveSingles={saveSinglesToLog}
-          />
-
-          {/* Hide bottom builder tile while overlay open */}
-          {!builderOpen && (
-            <div className="fixed bottom-16 left-0 right-0">
-              <div className="max-w-5xl mx-auto px-4">
-                <div className="rounded-2xl border bg-white shadow p-3 flex items-center gap-2">
-                  <div className="font-semibold">Bet Builder</div>
-                  <div className="text-sm text-gray-600">{parlay.length} items</div>
-                  <div className="ml-auto text-sm">
-                    {parlay.length>0 ? 'Ready' : 'Add legs on Home/Experts'}
-                  </div>
-                  <button className="px-3 py-1 rounded border" onClick={()=>setBuilderOpen(true)}>Open</button>
-                  {parlay.length>0 && <button className="px-3 py-1 rounded text-red-700" onClick={()=>setParlay([])}>Clear</button>}
-                </div>
+        <div className="mt-3 flex items-center gap-3"><ModelBadge homeWin={ev.model.homeWin}/></div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {ev.markets[0].options.map(opt=>{const {price,book}=bestPrice(opt); const desc=`${ev.away} @ ${ev.home} • ${opt.label}`;
+            return (<div key={opt.id} className="rounded-xl border p-3">
+              <div className="text-xs text-gray-500">Best: {book.name}</div><div className="font-semibold">{opt.label}</div><div className="text-sm">{price>0?`+${price}`:price}</div>
+              <div className="mt-2 flex gap-2">
+                <button className="px-3 py-1 rounded border text-sm" onClick={()=>onAddParlay({eventId:ev.id,label:desc,american:price,book:book.id})}>Add to Parlay</button>
+                <button className="px-3 py-1 rounded border text-sm" onClick={()=>onAddSingle({desc,american:price})}>Add Single</button>
               </div>
-            </div>
-          )}
-
-          <BottomNav current={route} onNav={setRoute} />
-          <LoginOverlay open={loginOpen} onClose={()=>setLoginOpen(false)} />
+            </div>);
+          })}
         </div>
-      );
-    }
+      </Card>))}
+    </div>
+  </div>);
+}
+function Game({game,onBack}){
+  if(!game) return null;
+  const trends=[{id:1,text:`${game.home} are 4-1 in last 5 at home`},{id:2,text:`${game.away} are 5-2 in last 7 overall`}];
+  return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <button className="text-sm text-blue-700" onClick={onBack}>← Back</button>
+    <h2 className="text-xl font-semibold mt-2"><button className="underline" onClick={onBack}>OneStop Bets</button> · {game.away} @ {game.home}<span className="ml-2 text-xs px-2 py-1 rounded bg-gray-200">{game.league}</span></h2>
+    <div className="text-sm text-gray-500">Starts {new Date(game.starts_at).toLocaleString()}</div>
+    <div className="mt-3"><ModelBadge homeWin={game.model.homeWin}/></div>
+    <SectionTitle>Team Stats & Trends</SectionTitle><Card><ul className="list-disc ml-5 text-sm">{trends.map(t=><li key={t.id}>{t.text}</li>)}</ul></Card>
+    <SectionTitle>Player Highlights (stub)</SectionTitle><Card><div className="text-sm">Top performers last game, usage, recent form…</div></Card>
+  </div>);
+}
+function News(){
+  const items=[
+    {id:1,sport:'NFL',league:'NFL',team:'49ers',title:'Injury Update: star questionable',source:'Athletic',minutes:12},
+    {id:2,sport:'NBA',league:'NBA',team:'Lakers',title:'Trade rumor heats up',source:'ESPN',minutes:18},
+    {id:3,sport:'MLB',league:'MLB',team:'Dodgers',title:'Pitching change for tonight',source:'MLB.com',minutes:6},
+  ];
+  const [sport,setSport]=useState('ALL'); const teams=useMemo(()=>[...new Set(items.filter(x=>sport==='ALL'||x.sport===sport).map(i=>i.team))],[sport]);
+  const [team,setTeam]=useState('ALL');
+  const filtered=items.filter(x=>sport==='ALL'||x.sport===sport).filter(x=>team==='ALL'||x.team===team).sort((a,b)=>a.minutes-b.minutes);
+  return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <div className="flex gap-2 mb-3 items-center">
+      <span className="text-sm">Sport:</span><select value={sport} onChange={(e)=>{setSport(e.target.value);setTeam('ALL');}} className="border rounded px-2 py-1 text-sm"><option value="ALL">ALL</option>{SPORTS.map(s=><option key={s}>{s}</option>)}</select>
+      <span className="text-sm">Team:</span><select value={team} onChange={(e)=>setTeam(e.target.value)} className="border rounded px-2 py-1 text-sm"><option value="ALL">ALL</option>{teams.map(t=><option key={t}>{t}</option>)}</select>
+    </div>
+    <div className="grid gap-3">{filtered.map(n=>(<Card key={n.id}><div className="text-sm text-gray-500">{n.league} · {n.team} · {n.source} · {n.minutes}m ago</div><div className="font-semibold mt-1">{n.title}</div></Card>))}</div>
+  </div>);
+}
+function Stats(){
+  const [tab,setTab]=useState('team'); const [sport,setSport]=useState('ALL');
+  const teamsAll=['49ers','Rams','Kings','Lakers','Giants','Dodgers'];
+  const teams=sport==='ALL'?teamsAll:teamsAll.filter(t=>(sport==='NFL'&&(t==='49ers'||t==='Rams'))||(sport==='NBA'&&(t==='Kings'||t==='Lakers'))||(sport==='MLB'&&(t==='Giants'||t==='Dodgers')));
+  const [team,setTeam]=useState('ALL'); const players=team==='49ers'?['McCaffrey','Deebo']:team==='Rams'?['Kupp','Stafford']:team==='Lakers'?['LeBron','AD']:team==='Kings'?['Fox','Sabonis']:team==='Giants'?['Yaz','Webb']:team==='Dodgers'?['Ohtani','Freeman']:[];
+  const [player,setPlayer]=useState('ALL'); const [range,setRange]=useState('season');
+  return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <div className="flex gap-2 mb-3 items-center">
+      <Chip active={tab==='team'} onClick={()=>setTab('team')}>Team</Chip><Chip active={tab==='individual'} onClick={()=>setTab('individual')}>Individual</Chip>
+      <span className="ml-auto text-sm">Range:</span>
+      <select className="border rounded px-2 py-1 text-sm" value={range} onChange={(e)=>setRange(e.target.value)}>
+        <option value="season">Season</option><option value="month">Last 30 days</option><option value="week">Last 7 days</option><option value="last_game">Last game</option><option value="all_time">All Time</option>
+      </select>
+    </div>
+    <Card>
+      <div className="grid sm:grid-cols-3 gap-3 mb-3">
+        <div><div className="text-xs text-gray-500">Sport</div><select className="border rounded px-2 py-1 w-full" value={sport} onChange={(e)=>{setSport(e.target.value);setTeam('ALL');setPlayer('ALL');}}><option value="ALL">ALL</option>{SPORTS.map(s=><option key={s}>{s}</option>)}</select></div>
+        <div><div className="text-xs text-gray-500">Team</div><select className="border rounded px-2 py-1 w-full" value={team} onChange={(e)=>{setTeam(e.target.value);setPlayer('ALL');}}><option value="ALL">ALL</option>{teams.map(t=><option key={t}>{t}</option>)}</select></div>
+        {tab==='individual'&&(<div><div className="text-xs text-gray-500">Player</div><select className="border rounded px-2 py-1 w-full" value={player} onChange={(e)=>setPlayer(e.target.value)}><option value="ALL">ALL</option>{players.map(p=><option key={p}>{p}</option>)}</select></div>)}
+      </div>
+      {tab==='team'? (<div className="text-sm"><div className="font-semibold mb-1">Team Trends</div><ul className="list-disc ml-5"><li>49ers: 7-1 on Sundays ({range.replace('_',' ')})</li><li>Dodgers: 5 straight unders on road ({range.replace('_',' ')})</li></ul></div>)
+      : (<div className="text-sm"><div className="font-semibold mb-1">Player Trends</div><ul className="list-disc ml-5"><li>LeBron: 4/5 games over 25.5 pts ({range.replace('_',' ')})</li><li>McCaffrey: TD in 6 straight ({range.replace('_',' ')})</li></ul></div>)}
+    </Card>
+  </div>);
+}
+function Promo(){
+  const promos=[
+    {id:1,book:'FanDuel',offer:'Bet $5, Get $150',code:'JOINFD'},
+    {id:2,book:'DraftKings',offer:'$200 Bonus Bets',code:'JOINDK'},
+    {id:3,book:'BetMGM',offer:'First Bet Insurance $1000',code:'JOINMGM'},
+  ];
+  return (<div className="max-w-5xl mx_auto px-4 pb-28 pt-4">
+    <SectionTitle>Book Offers</SectionTitle>
+    <div className="grid sm:grid-cols-2 gap-3">
+      {promos.map(p=>(<Card key={p.id}><div className="font-semibold">{p.book}</div><div className="text-sm text-gray-600">{p.offer}</div><div className="mt-2"><button className="px-3 py-2 rounded bg-black text-white" onClick={()=>alert('Open affiliate link (stub)')}>Claim Offer</button></div></Card>))}
+    </div>
+  </div>);
+}
+function Experts({onAddParlay,onAddSingle}){
+  const [tab,setTab]=useState('feed');
+  const [feed,setFeed]=useState([{id:1,author:'Sharp Mike',initials:'SM',title:'Kings -2.5 (-110)',event:'LAL @ SAC',snip:'Pace up spot; bench edge.'}]);
+  const [openProfile,setOpenProfile]=useState(null);
+  const publish=(post)=>setFeed(f=>[{id:Date.now(),author:'You',initials:'YW',title:post.title,event:post.event||'TBD',snip:post.snip},...f]);
+  const goProfile=(name,initials)=>setOpenProfile({name,initials,bio:'Short bio placeholder',picks:[...feed.map(f=>({title:f.title,snip:f.snip}))]});
+  if(openProfile){return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <button className="text-sm text-blue-700" onClick={()=>setOpenProfile(null)}>← Back</button>
+    <div className="flex items-center gap-3 mt-2"><div className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center">{openProfile.initials}</div>
+      <div><div className="font-semibold">{openProfile.name}</div><div className="text-xs text-gray-500">{openProfile.bio}</div></div></div>
+    <SectionTitle>Picks</SectionTitle><div className="grid gap-2">{openProfile.picks.map((p,i)=>(<Card key={i}><div className="font-medium">{p.title}</div><div className="text-sm text-gray-600">{p.snip}</div></Card>))}</div>
+  </div>);}
+  return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <div className="flex items-center gap-2 mb-3"><Chip active={tab==='feed'} onClick={()=>setTab('feed')}>Expert Feed</Chip><Chip active={tab==='leaderboard'} onClick={()=>setTab('leaderboard')}>Leaderboard</Chip><Chip active={tab==='writer'} onClick={()=>setTab('writer')}>Writer Console</Chip></div>
+    {tab==='feed'&&(<div className="grid sm:grid-cols-2 gap-3">{feed.map(item=>(<Card key={item.id}>
+      <div className="flex items-center gap-3"><button className="w-8 h-8 rounded-full bg-gray-900 text-white flex items-center justify-center" onClick={()=>goProfile(item.author,item.initials)}>{item.initials}</button>
+        <button className="font-semibold underline" onClick={()=>goProfile(item.author,item.initials)}>{item.author}</button></div>
+      <div className="mt-3"><span className="font-medium">{item.title}</span> <span className="text-xs text-gray-500">• {item.event}</span></div>
+      <div className="text-sm text-gray-600 mt-1">{item.snip}</div>
+      <div className="mt-2 flex gap-2">
+        <button className="px-3 py-1 rounded border text-sm" onClick={()=>onAddParlay({eventId:'feed',label:`${item.event} • ${item.title}`,american:-110,book:'fd'})}>Add to Parlay</button>
+        <button className="px-3 py-1 rounded border text-sm" onClick={()=>onAddSingle({desc:`${item.event} • ${item.title}`,american:-110})}>Add Single</button>
+      </div>
+    </Card>))}</div>)}
+    {tab==='leaderboard'&&(<Card><div className="font-semibold mb-2">Top Experts (YTD)</div><table className="w-full text-sm"><thead><tr className="text-left text-gray-500"><th>Name</th><th>W-L</th><th>ROI</th></tr></thead><tbody><tr><td>Sharp Mike</td><td>187-154</td><td className="text-green-700">+6.3%</td></tr><tr><td>Data Diva</td><td>162-130</td><td className="text-green-700">+4.8%</td></tr></tbody></table></Card>)}
+    {tab==='writer'&&<WriterConsole onPublish={publish}/>}
+  </div>);
+}
+function WriterConsole({onPublish}){
+  const [status,setStatus]=useState('draft');
+  const [pick,setPick]=useState({league:'NBA',game:'LAL @ SAC',market:'Spread',line:'-2.5',odds:-110,body:''});
+  const preview=()=>alert('Preview (stub)'); const games=mockEvents.map(ev=>`${ev.away} @ ${ev.home}`);
+  return (<div className="grid gap-3">
+    <Card>
+      <div className="font-semibold mb-2">Compose Pick</div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div><label className="text-xs text-gray-600">League</label><select className="border rounded px-2 py-1 w-full" value={pick.league} onChange={(e)=>setPick({...pick,league:e.target.value})}>{SPORTS.map(s=><option key={s}>{s}</option>)}</select></div>
+        <div><label className="text-xs text-gray-600">Game</label><select className="border rounded px-2 py-1 w-full" value={pick.game} onChange={(e)=>setPick({...pick,game:e.target.value})}>{games.map(g=><option key={g}>{g}</option>)}</select></div>
+        <div><label className="text-xs text-gray-600">Market</label><select className="border rounded px-2 py-1 w-full" value={pick.market} onChange={(e)=>setPick({...pick,market:e.target.value})}><option>Moneyline</option><option>Spread</option><option>Total</option></select></div>
+        <div><label className="text-xs text-gray-600">Line / Odds</label><div className="flex gap-2"><input className="border rounded px-2 py-1 w-full" placeholder="-2.5" value={pick.line} onChange={(e)=>setPick({...pick,line:e.target.value})}/><input type="number" className="border rounded px-2 py-1 w-28" placeholder="-110" value={pick.odds} onChange={(e)=>setPick({...pick,odds:parseInt(e.target.value)||-110})}/></div></div>
+        <div className="sm:col-span-2"><label className="text-xs text-gray-600">Writeup</label><textarea className="border rounded px-2 py-1 w-full" rows={4} value={pick.body} onChange={(e)=>setPick({...pick,body:e.target.value})}/></div>
+      </div>
+      <div className="mt-3 flex gap-2"><button className="px-3 py-2 rounded border" onClick={()=>setStatus('draft')}>Save Draft</button><button className="px-3 py-2 rounded border" onClick={preview}>Preview</button><button className="px-3 py-2 rounded bg-black text-white" onClick={()=>{setStatus('published');onPublish?.({title:`${pick.market} ${pick.line} (${pick.odds})`,event:pick.game,snip:pick.body||'Quick hit.'});}}>Publish</button></div>
+      <div className="text-xs text-gray-500 mt-1">Status: {status}</div>
+    </Card>
+  </div>);
+}
+function Activity({bets,setBets,startingBankroll,setStartingBankroll}){
+  const decFromAmerican=(a)=> (a>0? 1+a/100 : 1+100/Math.abs(a));
+  const net=(b)=>{ if(b.result==='push'||b.result==='open') return 0; const d=decFromAmerican(b.american); return b.result==='win'? b.stake*(d-1) : -b.stake; };
+  const totalStaked=bets.reduce((s,b)=> s+(b.result==='push'||b.result==='open'?0:Number(b.stake)),0);
+  const pnl=bets.reduce((s,b)=> s+net(b),0); const roi=totalStaked>0? (pnl/totalStaked):0; const currentBankroll=startingBankroll+pnl;
+  const autoResolve=()=>{ setBets(prev=>prev.map(b=>{ if(b.result!=='open') return b; const label=(b.desc||'').toLowerCase(); const match=mockEvents.find(ev=>label.includes(ev.home.toLowerCase())||label.includes(ev.away.toLowerCase())); if(!match||match.result.status!=='final') return b; const winner=match.result.homeScore>match.result.awayScore? match.home:match.away; const chosen=label.includes(winner.toLowerCase()); return {...b,result:chosen?'win':'loss'}; })); alert('Results refreshed from mock scores.'); };
+  return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <SectionTitle>Bankroll</SectionTitle>
+    <Card><div className="grid sm:grid-cols-4 gap-3 items-end">
+      <div><div className="text-xs text-gray-500">Starting Bankroll ($)</div><input type="number" value={startingBankroll} onChange={(e)=>setStartingBankroll(parseFloat(e.target.value)||0)} className="border rounded px-2 py-1 w-full"/></div>
+      <div><div className="text-xs text-gray-500">Current Bankroll</div><div className="text-xl font-bold">${currentBankroll.toFixed(2)}</div></div>
+      <div><div className="text-xs text-gray-500">Profit / Loss</div><div className={`text-xl font-bold ${pnl>=0?'text-green-700':'text-red-700'}`}>{pnl>=0?'+':''}${pnl.toFixed(2)}</div></div>
+      <div><div className="text-xs text-gray-500">ROI</div><div className={`text-xl font-bold ${roi>=0?'text-green-700':'text-red-700'}`}>{(roi*100).toFixed(2)}%</div></div>
+    </div></Card>
+    <SectionTitle>My Logged Bets</SectionTitle>
+    <Card>{bets.length===0? (<div className="text-sm">No bets logged yet.</div>):(<div className="overflow-x-auto">
+      <table className="w-full text-sm"><thead><tr className="text-left text-gray-500"><th className="py-1">Date</th><th>Bet</th><th className="text-right">Stake</th><th className="text-right">Odds</th><th className="text-right">Result</th><th className="text-right">Net</th></tr></thead><tbody>
+        {bets.map(b=>{ const n=net(b); return (<tr key={b.id} className="border-t"><td className="py-2">{b.date}</td><td>{b.desc||'—'}</td><td className="text-right">${Number(b.stake).toFixed(2)}</td><td className="text-right">{b.american>0?`+${b.american}`:b.american}</td><td className="text-right">{b.result}</td><td className={`text-right ${n>=0?'text-green-700':'text-red-700'}`}>{n>=0?'+':''}${n.toFixed(2)}</td></tr>); })}
+        <tr className="border-t font-semibold"><td colSpan="2">Totals</td><td className="text-right">${totalStaked.toFixed(2)}</td><td></td><td></td><td className={`text-right ${pnl>=0?'text-green-700':'text-red-700'}`}>{pnl>=0?'+':''}${pnl.toFixed(2)}</td></tr>
+      </tbody></table></div>)}
+      <div className="mt-3 flex justify-end"><button className="px-3 py-2 rounded border" onClick={autoResolve}>Refresh Results (demo)</button></div>
+    </Card>
+  </div>);
+}
+function Account(){
+  const [preferredBook,setPreferredBook]=useState('fd'); const [request,setRequest]=useState('');
+  return (<div className="max-w-5xl mx-auto px-4 pb-28 pt-4">
+    <SectionTitle>Preferences</SectionTitle>
+    <Card><div className="grid sm:grid-cols-2 gap-3 text-sm">
+      <div><div className="text-xs text-gray-600 mb-1">Preferred Sportsbook</div><select className="border rounded px-2 py-1 w-full" value={preferredBook} onChange={(e)=>setPreferredBook(e.target.value)}>{BOOKS.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+      <div><div className="text-xs text-gray-600 mb-1">Request a sportsbook</div><div className="flex gap-2"><input className="border rounded px-2 py-1 w-full" placeholder="Not listed? Tell us…" value={request} onChange={(e)=>setRequest(e.target.value)}/><button className="px-3 py-2 rounded border" onClick={()=>{if(request.trim()){alert('Request noted: '+request);setRequest('');}}}>Send</button></div></div>
+    </div></Card>
+  </div>);
+}
+function AuthOverlay({open,onClose,onGuest}){
+  const [mode,setMode]=useState('login'); const [email,setEmail]=useState(''); const [pwd,setPwd]=useState(''); if(!open) return null;
+  return (<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={onClose}>
+    <div className="w-[420px] bg-white rounded-2xl shadow-xl p-5" onClick={(e)=>e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-3"><div className="text-lg font-semibold">{mode==='login'?'Sign in':'Sign up'}</div>
+        <button className="text-sm text-blue-700" onClick={()=>setMode(mode==='login'?'signup':'login')}>{mode==='login'?'Create account':'Have an account? Sign in'}</button></div>
+      <div className="grid gap-3"><input className="border rounded px-3 py-2" placeholder="Email" value={email} onChange={(e)=>setEmail(e.target.value)}/>
+        <input className="border rounded px-3 py-2" type="password" placeholder="Password" value={pwd} onChange={(e)=>setPwd(e.target.value)}/>
+        <button className="px-3 py-2 rounded bg-black text-white" onClick={onClose}>{mode==='login'?'Continue':'Create account'}</button>
+        <button className="px-3 py-2 rounded border" onClick={()=>{onGuest();onClose();}}>Continue as Guest</button></div>
+    </div>
+  </div>);
+}
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
+// ------- Root App
+function App(){
+  const [route,setRoute]=useState('home'); const [authOpen,setAuthOpen]=useState(true); const [authLabel,setAuthLabel]=useState('Login / Sign up');
+  const [parlay,setParlay]=useState([]); const [singles,setSingles]=useState([]); const [builderOpen,setBuilderOpen]=useState(false);
+  const [bets,setBets]=useState([{id:1,date:'2025-08-10',desc:'49ers ML',stake:50,american:-120,result:'win'},{id:2,date:'2025-08-11',desc:'Dodgers @ Giants Over 8.5',stake:30,american:-105,result:'loss'},{id:3,date:'2025-08-12',desc:'Lakers +2.5',stake:25,american:102,result:'open'}]);
+  const [startingBankroll,setStartingBankroll]=useState(1000); const [gameView,setGameView]=useState(null);
+  const onAddParlay=(leg)=>{setParlay(x=>[...x,leg]);setBuilderOpen(true);};
+  const onAddSingle=(s)=>{setSingles(x=>[...x,{...s,stake:25}]);setBuilderOpen(true);};
+  const openGame=(ev)=>{setGameView(ev);setRoute('game');};
+  const placeParlay=({stake,place})=>{ if(!parlay.length) return; const legs=parlay; const date=new Date().toISOString().slice(0,10); const decTotal=legs.reduce((a,l)=>a*americanToDecimal(l.american),1); const americanTotal=decimalToAmerican(decTotal); const desc=`PARLAY (${legs.length}): `+legs.map(l=>l.label).join(' • '); const nextId=(bets[bets.length-1]?.id||0)+1; setBets(prev=>[...prev,{id:nextId,date,desc,stake:Number(stake)||0,american:americanTotal,result:'open'}]); if(place) alert('Opening sportsbook (stub) and auto-saving to log.'); };
+  const placeSingles=({place})=>{ if(!singles.length) return; const date=new Date().toISOString().slice(0,10); let id=(bets[bets.length-1]?.id||0); setBets(prev=>[...prev,...singles.map(s=>({id:++id,date,desc:s.desc,stake:Number(s.stake)||0,american:Number(s.american)||-110,result:'open'}))]); if(place) alert('Opening sportsbook (stub) and auto-saving to log.'); };
+  const Header=()=>(<div className="sticky top-0 z-20 bg-white border-b"><div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3"><button className="font-bold" onClick={()=>{setRoute('home');setGameView(null);}}>OneStop Bets</button><div className="ml-auto"><button className="px-3 py-1 rounded border text-sm" onClick={()=>setAuthOpen(true)}>{authLabel}</button></div></div></div>);
+  return (<div className="min-h-screen bg-gray-100 text-gray-900">
+    <Header/>
+    {route==='home'&&<Home onAddParlay={onAddParlay} onAddSingle={onAddSingle} onOpenGame={openGame}/>}
+    {route==='game'&&<Game game={gameView} onBack={()=>setRoute('home')}/>}
+    {route==='builder'&&<BetBuilderPage parlay={parlay} setParlay={setParlay} singles={singles} setSingles={setSingles} onPlaceParlay={({stake,place})=>{placeParlay({stake,place});}} onPlaceSingles={({place})=>{placeSingles({place});}}/>}
+    {route==='activity'&&<Activity bets={bets} setBets={setBets} startingBankroll={startingBankroll} setStartingBankroll={setStartingBankroll}/>}
+    {route==='experts'&&<Experts onAddParlay={onAddParlay} onAddSingle={onAddSingle}/>}
+    {route==='news'&&<News/>}
+    {route==='stats'&&<Stats/>}
+    {route==='promo'&&<Promo/>}
+    {route==='account'&&<Account/>}
+
+    {route!=='builder'&&(<div className="fixed bottom-16 left-0 right-0"><div className="max-w-5xl mx-auto px-4"><div className="rounded-2xl border bg-white shadow p-3 flex items-center gap-2"><div className="font-semibold">Bet Builder</div><div className="text-sm text-gray-600">{parlay.length} legs · {singles.length} singles</div><div className="ml-auto"/><button className="px-3 py-1 rounded border" onClick={()=>setBuilderOpen(true)}>Open</button>{(parlay.length||singles.length)?<button className="px-3 py-1 rounded text-red-700" onClick={()=>{setParlay([]);setSingles([]);}}>Clear</button>:null}</div></div></div>)}
+    {route!=='builder'&&(<BetBuilderOverlay open={builderOpen} onClose={()=>setBuilderOpen(false)} parlay={parlay} setParlay={setParlay} singles={singles} setSingles={setSingles} onPlaceParlay={({stake,place})=>{placeParlay({stake,place});setBuilderOpen(false);}} onPlaceSingles={({place})=>{placeSingles({place});setBuilderOpen(false);}}/>)}
+
+    <BottomNav current={route} onNav={setRoute}/>
+    <AuthOverlay open={authOpen} onClose={()=>setAuthOpen(false)} onGuest={()=>setAuthLabel('Login / Sign up')}/>
+  </div>);
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
 </body>
 </html>
